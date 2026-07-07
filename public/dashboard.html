@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Village Announcement Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap dashboard-wrap">
+  <h1>Village Announcement Dashboard</h1>
+  <p class="subtitle">Everything staff submitted for a given Sunday, split into what to say and what to print.</p>
+
+  <nav class="tabs">
+    <a href="index.html">Submit</a>
+    <a href="dashboard.html" class="active">Dashboard</a>
+  </nav>
+
+  <div class="dash-controls">
+    <label style="margin:0;">For Sunday:</label>
+    <select id="serviceDate"></select>
+    <span class="count-pill" id="count-pill">0 announcements</span>
+    <button class="secondary" id="copy-bulletin-btn" type="button">Copy Bulletin Text</button>
+    <button class="secondary" id="copy-announce-btn" type="button">Copy Spoken List</button>
+  </div>
+
+  <div class="section">
+    <h2>To Announce (spoken Sunday)</h2>
+    <div id="announce-list"></div>
+  </div>
+
+  <div class="section">
+    <h2>For the Bulletin (printed)</h2>
+    <div id="bulletin-list"></div>
+  </div>
+</div>
+
+<script>
+const dateInput = document.getElementById('serviceDate');
+const announceList = document.getElementById('announce-list');
+const bulletinList = document.getElementById('bulletin-list');
+const countPill = document.getElementById('count-pill');
+let currentData = [];
+
+function fmtDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function renderCard(item) {
+  const div = document.createElement('div');
+  div.className = 'card' + (item.done ? ' done' : '');
+  div.innerHTML = `
+    <div class="body">
+      <div class="title">${item.title}</div>
+      ${item.description ? `<div class="desc">${item.description}</div>` : ''}
+      <div class="meta">
+        ${item.channel === 'both' ? '<span class="tag">Both</span>' : item.channel === 'announce' ? '<span class="tag">Spoken only</span>' : '<span class="tag">Bulletin only</span>'}
+        ${item.submittedBy ? 'Submitted by ' + item.submittedBy : 'Submitted anonymously'}
+      </div>
+    </div>
+    <div class="actions">
+      <button data-action="done">${item.done ? 'Unmark' : 'Mark done'}</button>
+      <button data-action="delete">Delete</button>
+    </div>
+  `;
+  div.querySelector('[data-action="done"]').addEventListener('click', () => toggleDone(item));
+  div.querySelector('[data-action="delete"]').addEventListener('click', () => remove(item));
+  return div;
+}
+
+async function toggleDone(item) {
+  await fetch(`/api/announcements/${item.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ done: !item.done }),
+  });
+  load();
+}
+
+async function remove(item) {
+  if (!confirm(`Delete "${item.title}"?`)) return;
+  await fetch(`/api/announcements/${item.id}`, { method: 'DELETE' });
+  load();
+}
+
+function render() {
+  const toAnnounce = currentData.filter(a => a.channel === 'announce' || a.channel === 'both');
+  const toBulletin = currentData.filter(a => a.channel === 'bulletin' || a.channel === 'both');
+
+  announceList.innerHTML = '';
+  if (toAnnounce.length === 0) announceList.innerHTML = '<div class="empty">Nothing to announce yet.</div>';
+  toAnnounce.forEach(item => announceList.appendChild(renderCard(item)));
+
+  bulletinList.innerHTML = '';
+  if (toBulletin.length === 0) bulletinList.innerHTML = '<div class="empty">Nothing for the bulletin yet.</div>';
+  toBulletin.forEach(item => bulletinList.appendChild(renderCard(item)));
+
+  countPill.textContent = `${currentData.length} announcement${currentData.length === 1 ? '' : 's'}`;
+}
+
+async function load() {
+  const res = await fetch(`/api/announcements?serviceDate=${dateInput.value}`);
+  currentData = await res.json();
+  render();
+}
+
+dateInput.addEventListener('change', load);
+
+function fmtOption(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+}
+
+fetch('/api/upcoming-sundays').then(r => r.json()).then(({ dates }) => {
+  dateInput.innerHTML = dates.map(iso => `<option value="${iso}">Sunday, ${fmtOption(iso)}</option>`).join('');
+  load();
+});
+
+function buildText(list) {
+  const header = `Announcements for ${fmtDate(dateInput.value)}\n\n`;
+  const body = list.map(a => `• ${a.title}${a.description ? '\n  ' + a.description.replace(/\n/g, '\n  ') : ''}`).join('\n\n');
+  return header + (body || '(none)');
+}
+
+async function copyText(text) {
+  await navigator.clipboard.writeText(text);
+}
+
+document.getElementById('copy-bulletin-btn').addEventListener('click', () => {
+  const list = currentData.filter(a => a.channel === 'bulletin' || a.channel === 'both');
+  copyText(buildText(list));
+});
+
+document.getElementById('copy-announce-btn').addEventListener('click', () => {
+  const list = currentData.filter(a => a.channel === 'announce' || a.channel === 'both');
+  copyText(buildText(list));
+});
+</script>
+</body>
+</html>

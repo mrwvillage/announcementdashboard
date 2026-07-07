@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Village Announcement Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Village Announcement Dashboard</h1>
+  <p class="subtitle">Submit an announcement for Sunday service and/or the bulletin. Submit by end of day Thursday if possible.</p>
+
+  <nav class="tabs">
+    <a href="index.html" class="active">Submit</a>
+    <a href="dashboard.html">Dashboard</a>
+  </nav>
+
+  <form id="announcement-form">
+    <label for="title">Title</label>
+    <input type="text" id="title" name="title" placeholder="e.g. Women's Retreat" required>
+
+    <label for="description">Details</label>
+    <textarea id="description" name="description" placeholder="Anything staff/congregation need to know: date, time, location, contact, sign-up link..."></textarea>
+
+    <label for="serviceDate">Which Sunday should this run?</label>
+    <select id="serviceDate" name="serviceDate" required></select>
+
+    <label>Where should this appear?</label>
+    <div class="radio-row" id="channel-group">
+      <label class="radio-card" data-value="both">
+        <input type="radio" name="channel" value="both" checked>
+        Both
+      </label>
+      <label class="radio-card" data-value="announce">
+        <input type="radio" name="channel" value="announce">
+        Spoken only
+      </label>
+      <label class="radio-card" data-value="bulletin">
+        <input type="radio" name="channel" value="bulletin">
+        Bulletin only
+      </label>
+    </div>
+
+    <label for="submittedBy">Your name</label>
+    <input type="text" id="submittedBy" name="submittedBy" placeholder="Optional, helps if we have questions">
+
+    <button type="submit">Submit Announcement</button>
+    <div id="status"></div>
+  </form>
+</div>
+
+<script>
+const form = document.getElementById('announcement-form');
+const statusEl = document.getElementById('status');
+const dateInput = document.getElementById('serviceDate');
+const channelGroup = document.getElementById('channel-group');
+
+function fmtSunday(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+}
+
+function loadSundays() {
+  return fetch('/api/upcoming-sundays').then(r => r.json()).then(({ dates }) => {
+    dateInput.innerHTML = dates.map(iso => `<option value="${iso}">Sunday, ${fmtSunday(iso)}</option>`).join('');
+  });
+}
+loadSundays();
+
+function syncSelected() {
+  [...channelGroup.querySelectorAll('.radio-card')].forEach((card) => {
+    const input = card.querySelector('input');
+    card.classList.toggle('selected', input.checked);
+  });
+}
+channelGroup.addEventListener('change', syncSelected);
+syncSelected();
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  statusEl.className = '';
+  statusEl.textContent = '';
+
+  const payload = {
+    title: form.title.value,
+    description: form.description.value,
+    serviceDate: form.serviceDate.value,
+    submittedBy: form.submittedBy.value,
+    channel: form.channel.value,
+  };
+
+  try {
+    const res = await fetch('/api/announcements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Something went wrong');
+
+    statusEl.textContent = 'Submitted! Thank you.';
+    statusEl.className = 'ok';
+    form.reset();
+    loadSundays();
+    syncSelected();
+  } catch (err) {
+    statusEl.textContent = err.message;
+    statusEl.className = 'err';
+  }
+});
+</script>
+</body>
+</html>
