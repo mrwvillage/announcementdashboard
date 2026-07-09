@@ -44,6 +44,16 @@ def upcoming_sundays(count=12):
     return [(first + timedelta(weeks=i)).strftime("%Y-%m-%d") for i in range(count)]
 
 
+def upcoming_months(count=6):
+    d = datetime.now()
+    months = []
+    for i in range(1, count + 1):
+        m = (d.month - 1 + i) % 12 + 1
+        y = d.year + (d.month - 1 + i) // 12
+        months.append(f"{y:04d}-{m:02d}")
+    return months
+
+
 def gen_id():
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
 
@@ -98,11 +108,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"dates": upcoming_sundays()})
             return
 
+        if path == "/api/upcoming-months":
+            self._send_json(200, {"months": upcoming_months()})
+            return
+
         if path == "/api/announcements":
             items = read_announcements()
             service_date = query.get("serviceDate", [None])[0]
+            newsletter_month = query.get("newsletterMonth", [None])[0]
             if service_date:
                 items = [a for a in items if a.get("serviceDate") == service_date]
+            if newsletter_month:
+                items = [a for a in items if a.get("newsletterMonth") == newsletter_month]
             items.sort(key=lambda a: a.get("createdAt", ""))
             self._send_json(200, items)
             return
@@ -122,18 +139,30 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             title = (data.get("title") or "").strip()
+            submitted_by = (data.get("submittedBy") or "").strip()
             service_date = data.get("serviceDate")
+            newsletter_month = data.get("newsletterMonth")
             channel = data.get("channel")
 
             if not title:
                 self._send_json(400, {"error": "Title is required"})
                 return
-            if not service_date:
-                self._send_json(400, {"error": "Service date is required"})
+            if not submitted_by:
+                self._send_json(400, {"error": "Your name is required"})
                 return
-            if channel not in ("announce", "bulletin", "both"):
+            if channel not in ("announce", "bulletin", "both", "newsletter"):
                 self._send_json(400, {"error": "Invalid channel"})
                 return
+            if channel == "newsletter":
+                if not newsletter_month:
+                    self._send_json(400, {"error": "Newsletter month is required"})
+                    return
+                service_date = None
+            else:
+                if not service_date:
+                    self._send_json(400, {"error": "Service date is required"})
+                    return
+                newsletter_month = None
 
             items = read_announcements()
             entry = {
@@ -141,7 +170,8 @@ class Handler(BaseHTTPRequestHandler):
                 "title": title,
                 "description": (data.get("description") or "").strip(),
                 "serviceDate": service_date,
-                "submittedBy": (data.get("submittedBy") or "").strip(),
+                "newsletterMonth": newsletter_month,
+                "submittedBy": submitted_by,
                 "channel": channel,
                 "createdAt": datetime.utcnow().isoformat(),
                 "done": False,

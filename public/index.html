@@ -11,57 +11,124 @@
 <body>
 <div class="wrap">
   <h1>Village Announcement Dashboard</h1>
-  <p class="subtitle">Submit an announcement for Sunday service and/or the bulletin. Submit spoken announcements by the end of day Wednesday. Submit bulletin announcements by the end of day Monday.</p>
 
   <nav class="tabs">
     <a href="index.html" class="active">Submit</a>
     <a href="dashboard.html">Dashboard</a>
   </nav>
 
-  <form id="announcement-form">
-    <label for="title">Title</label>
-    <input type="text" id="title" name="title" placeholder="e.g. Women's Retreat" required>
+  <section class="dashboard-panel">
+    <h2 class="panel-title">Sunday Service</h2>
+    <p class="subtitle">Bulletin announcements due the Monday before announcement.<br>Spoken announcements due the Thursday before announcement.</p>
+    <form id="sunday-form" autocomplete="off">
+      <label for="sunday-submittedBy">Your name</label>
+      <input type="text" id="sunday-submittedBy" name="submittedBy" placeholder="So we know who submitted this" required>
 
-    <label for="description">Details</label>
-    <textarea id="description" name="description" placeholder="Anything staff/congregation need to know: date, time, location, contact, sign-up link..."></textarea>
+      <label for="sunday-title">Title</label>
+      <input type="text" id="sunday-title" name="title" placeholder="e.g. Women's Retreat" required>
 
-    <label for="serviceDate">Which Sunday should this run?</label>
-    <select id="serviceDate" name="serviceDate" required></select>
+      <label for="sunday-description">Details</label>
+      <textarea id="sunday-description" name="description" placeholder="Anything staff/congregation need to know: date, time, location, contact, sign-up link..."></textarea>
 
-    <label>Where should this appear?</label>
-    <div class="radio-row" id="channel-group">
-      <label class="radio-card" data-value="both">
-        <input type="radio" name="channel" value="both" checked>
-        Both
-      </label>
-      <label class="radio-card" data-value="announce">
-        <input type="radio" name="channel" value="announce">
-        Spoken only
-      </label>
-      <label class="radio-card" data-value="bulletin">
-        <input type="radio" name="channel" value="bulletin">
-        Bulletin only
-      </label>
-    </div>
+      <label>Where should this appear?</label>
+      <div class="radio-row">
+        <label class="radio-card" data-value="both">
+          <input type="radio" name="channel" value="both" checked>
+          Both
+        </label>
+        <label class="radio-card" data-value="announce">
+          <input type="radio" name="channel" value="announce">
+          Spoken only
+        </label>
+        <label class="radio-card" data-value="bulletin">
+          <input type="radio" name="channel" value="bulletin">
+          Bulletin only
+        </label>
+      </div>
 
-    <label for="submittedBy">Your name</label>
-    <input type="text" id="submittedBy" name="submittedBy" placeholder="Optional, helps if we have questions">
+      <label for="serviceDate">Which Sunday should this run?</label>
+      <select id="serviceDate" name="serviceDate" required></select>
 
-    <button type="submit">Submit Announcement</button>
-    <div id="status"></div>
-  </form>
+      <button type="submit">Submit Sunday Announcement</button>
+      <div id="sunday-status"></div>
+    </form>
+  </section>
+
+  <section class="dashboard-panel">
+    <h2 class="panel-title">Newsletter</h2>
+    <p class="subtitle">Announcements due by the 25th of the month (e.g. info for the August Newsletter is due July 25th).</p>
+    <form id="newsletter-form" autocomplete="off">
+      <label for="newsletter-submittedBy">Your name</label>
+      <input type="text" id="newsletter-submittedBy" name="submittedBy" placeholder="So we know who submitted this" required>
+
+      <label for="newsletter-title">Title</label>
+      <input type="text" id="newsletter-title" name="title" placeholder="e.g. Women's Retreat" required>
+
+      <label for="newsletter-description">Details</label>
+      <textarea id="newsletter-description" name="description" placeholder="Anything staff/congregation need to know: date, time, location, contact, sign-up link..."></textarea>
+
+      <label for="newsletterMonth">Which month's newsletter?</label>
+      <select id="newsletterMonth" name="newsletterMonth" required></select>
+
+      <button type="submit">Submit Newsletter Item</button>
+      <div id="newsletter-status"></div>
+    </form>
+  </section>
 </div>
 
 <script>
-const form = document.getElementById('announcement-form');
-const statusEl = document.getElementById('status');
-const dateInput = document.getElementById('serviceDate');
-const channelGroup = document.getElementById('channel-group');
-
 function fmtSunday(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
 }
+
+function fmtMonth(iso) {
+  const [y, m] = iso.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+async function submitForm({ form, statusEl, buildPayload, onReset }) {
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    statusEl.className = '';
+    statusEl.textContent = '';
+
+    try {
+      const res = await fetch('/api/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload()),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Something went wrong');
+
+      statusEl.textContent = 'Submitted! Thank you.';
+      statusEl.className = 'ok';
+      form.reset();
+      onReset();
+    } catch (err) {
+      statusEl.textContent = err.message;
+      statusEl.className = 'err';
+    }
+  });
+}
+
+// Sunday Service form
+const sundayForm = document.getElementById('sunday-form');
+const sundayStatus = document.getElementById('sunday-status');
+const dateInput = document.getElementById('serviceDate');
+const sundayRadioGroup = sundayForm.querySelectorAll('.radio-card');
+
+function syncSundaySelected() {
+  sundayRadioGroup.forEach((card) => {
+    const input = card.querySelector('input');
+    card.classList.toggle('selected', input.checked);
+  });
+}
+sundayForm.addEventListener('change', (e) => {
+  if (e.target.name === 'channel') syncSundaySelected();
+});
+syncSundaySelected();
 
 function loadSundays() {
   return fetch('/api/upcoming-sundays').then(r => r.json()).then(({ dates }) => {
@@ -70,46 +137,47 @@ function loadSundays() {
 }
 loadSundays();
 
-function syncSelected() {
-  [...channelGroup.querySelectorAll('.radio-card')].forEach((card) => {
-    const input = card.querySelector('input');
-    card.classList.toggle('selected', input.checked);
+submitForm({
+  form: sundayForm,
+  statusEl: sundayStatus,
+  buildPayload: () => ({
+    title: sundayForm.title.value,
+    description: sundayForm.description.value,
+    serviceDate: sundayForm.serviceDate.value,
+    submittedBy: sundayForm.submittedBy.value,
+    channel: sundayForm.channel.value,
+  }),
+  onReset: () => {
+    loadSundays();
+    syncSundaySelected();
+  },
+});
+
+// Newsletter form
+const newsletterForm = document.getElementById('newsletter-form');
+const newsletterStatus = document.getElementById('newsletter-status');
+const monthInput = document.getElementById('newsletterMonth');
+
+function loadMonths() {
+  return fetch('/api/upcoming-months').then(r => r.json()).then(({ months }) => {
+    monthInput.innerHTML = months.map(iso => `<option value="${iso}">${fmtMonth(iso)}</option>`).join('');
   });
 }
-channelGroup.addEventListener('change', syncSelected);
-syncSelected();
+loadMonths();
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  statusEl.className = '';
-  statusEl.textContent = '';
-
-  const payload = {
-    title: form.title.value,
-    description: form.description.value,
-    serviceDate: form.serviceDate.value,
-    submittedBy: form.submittedBy.value,
-    channel: form.channel.value,
-  };
-
-  try {
-    const res = await fetch('/api/announcements', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Something went wrong');
-
-    statusEl.textContent = 'Submitted! Thank you.';
-    statusEl.className = 'ok';
-    form.reset();
-    loadSundays();
-    syncSelected();
-  } catch (err) {
-    statusEl.textContent = err.message;
-    statusEl.className = 'err';
-  }
+submitForm({
+  form: newsletterForm,
+  statusEl: newsletterStatus,
+  buildPayload: () => ({
+    title: newsletterForm.title.value,
+    description: newsletterForm.description.value,
+    newsletterMonth: newsletterForm.newsletterMonth.value,
+    submittedBy: newsletterForm.submittedBy.value,
+    channel: 'newsletter',
+  }),
+  onReset: () => {
+    loadMonths();
+  },
 });
 </script>
 </body>

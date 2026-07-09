@@ -39,6 +39,10 @@ h1 {
   font-size: 0.95rem;
 }
 
+.panel-title + .subtitle {
+  margin-bottom: 10px;
+}
+
 nav.tabs {
   display: flex;
   gap: 8px;
@@ -61,12 +65,6 @@ nav.tabs a.active {
   border-color: var(--accent);
 }
 
-form {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 24px;
-}
 
 label {
   display: block;
@@ -95,12 +93,14 @@ textarea { min-height: 90px; resize: vertical; }
 
 .radio-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 6px;
 }
 
 .radio-card {
   flex: 1;
+  min-width: 100px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
@@ -180,11 +180,31 @@ button.secondary {
   color: var(--muted);
 }
 
+.dashboard-panel {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 24px;
+  margin-bottom: 28px;
+}
+
+.panel-title {
+  font-size: 1.3rem;
+  margin: 0 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--accent-soft);
+  color: var(--accent);
+}
+
 .section {
   margin-bottom: 32px;
 }
 
-.section h2 {
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.section h3 {
   font-size: 1.05rem;
   display: flex;
   align-items: center;

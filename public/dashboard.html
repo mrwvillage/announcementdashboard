@@ -18,23 +18,43 @@
     <a href="dashboard.html" class="active">Dashboard</a>
   </nav>
 
-  <div class="dash-controls">
-    <label style="margin:0;">For Sunday:</label>
-    <select id="serviceDate"></select>
-    <span class="count-pill" id="count-pill">0 announcements</span>
-    <button class="secondary" id="copy-bulletin-btn" type="button">Copy Bulletin Text</button>
-    <button class="secondary" id="copy-announce-btn" type="button">Copy Spoken List</button>
-  </div>
+  <section class="dashboard-panel">
+    <h2 class="panel-title">Sunday Service</h2>
 
-  <div class="section">
-    <h2>To Announce (spoken Sunday)</h2>
-    <div id="announce-list"></div>
-  </div>
+    <div class="dash-controls">
+      <label style="margin:0;">For Sunday:</label>
+      <select id="serviceDate"></select>
+      <span class="count-pill" id="count-pill">0 announcements</span>
+      <button class="secondary" id="copy-bulletin-btn" type="button">Copy Bulletin Text</button>
+      <button class="secondary" id="copy-announce-btn" type="button">Copy Spoken List</button>
+    </div>
 
-  <div class="section">
-    <h2>For the Bulletin (printed)</h2>
-    <div id="bulletin-list"></div>
-  </div>
+    <div class="section">
+      <h3>To Announce (spoken Sunday)</h3>
+      <div id="announce-list"></div>
+    </div>
+
+    <div class="section">
+      <h3>For the Bulletin (printed)</h3>
+      <div id="bulletin-list"></div>
+    </div>
+  </section>
+
+  <section class="dashboard-panel">
+    <h2 class="panel-title">Newsletter</h2>
+
+    <div class="dash-controls">
+      <label style="margin:0;">For Newsletter Month:</label>
+      <select id="newsletterMonth"></select>
+      <span class="count-pill" id="newsletter-count-pill">0 announcements</span>
+      <button class="secondary" id="copy-newsletter-btn" type="button">Copy Newsletter Text</button>
+    </div>
+
+    <div class="section">
+      <h3>For the Newsletter</h3>
+      <div id="newsletter-list"></div>
+    </div>
+  </section>
 </div>
 
 <script>
@@ -42,11 +62,20 @@ const dateInput = document.getElementById('serviceDate');
 const announceList = document.getElementById('announce-list');
 const bulletinList = document.getElementById('bulletin-list');
 const countPill = document.getElementById('count-pill');
+const monthInput = document.getElementById('newsletterMonth');
+const newsletterList = document.getElementById('newsletter-list');
+const newsletterCountPill = document.getElementById('newsletter-count-pill');
 let currentData = [];
+let newsletterData = [];
 
 function fmtDate(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function fmtMonth(iso) {
+  const [y, m] = iso.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 function renderCard(item) {
@@ -57,7 +86,7 @@ function renderCard(item) {
       <div class="title">${item.title}</div>
       ${item.description ? `<div class="desc">${item.description}</div>` : ''}
       <div class="meta">
-        ${item.channel === 'both' ? '<span class="tag">Both</span>' : item.channel === 'announce' ? '<span class="tag">Spoken only</span>' : '<span class="tag">Bulletin only</span>'}
+        ${item.channel === 'both' ? '<span class="tag">Both</span>' : item.channel === 'announce' ? '<span class="tag">Spoken only</span>' : item.channel === 'bulletin' ? '<span class="tag">Bulletin only</span>' : '<span class="tag">Newsletter</span>'}
         ${item.submittedBy ? 'Submitted by ' + item.submittedBy : 'Submitted anonymously'}
       </div>
     </div>
@@ -78,12 +107,14 @@ async function toggleDone(item) {
     body: JSON.stringify({ done: !item.done }),
   });
   load();
+  loadNewsletter();
 }
 
 async function remove(item) {
   if (!confirm(`Delete "${item.title}"?`)) return;
   await fetch(`/api/announcements/${item.id}`, { method: 'DELETE' });
   load();
+  loadNewsletter();
 }
 
 function render() {
@@ -107,7 +138,21 @@ async function load() {
   render();
 }
 
+function renderNewsletter() {
+  newsletterList.innerHTML = '';
+  if (newsletterData.length === 0) newsletterList.innerHTML = '<div class="empty">Nothing for the newsletter yet.</div>';
+  newsletterData.forEach(item => newsletterList.appendChild(renderCard(item)));
+  newsletterCountPill.textContent = `${newsletterData.length} announcement${newsletterData.length === 1 ? '' : 's'}`;
+}
+
+async function loadNewsletter() {
+  const res = await fetch(`/api/announcements?newsletterMonth=${monthInput.value}`);
+  newsletterData = await res.json();
+  renderNewsletter();
+}
+
 dateInput.addEventListener('change', load);
+monthInput.addEventListener('change', loadNewsletter);
 
 function fmtOption(iso) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -119,10 +164,14 @@ fetch('/api/upcoming-sundays').then(r => r.json()).then(({ dates }) => {
   load();
 });
 
-function buildText(list) {
-  const header = `Announcements for ${fmtDate(dateInput.value)}\n\n`;
+fetch('/api/upcoming-months').then(r => r.json()).then(({ months }) => {
+  monthInput.innerHTML = months.map(iso => `<option value="${iso}">${fmtMonth(iso)}</option>`).join('');
+  loadNewsletter();
+});
+
+function buildText(list, header) {
   const body = list.map(a => `• ${a.title}${a.description ? '\n  ' + a.description.replace(/\n/g, '\n  ') : ''}`).join('\n\n');
-  return header + (body || '(none)');
+  return header + '\n\n' + (body || '(none)');
 }
 
 async function copyText(text) {
@@ -131,12 +180,16 @@ async function copyText(text) {
 
 document.getElementById('copy-bulletin-btn').addEventListener('click', () => {
   const list = currentData.filter(a => a.channel === 'bulletin' || a.channel === 'both');
-  copyText(buildText(list));
+  copyText(buildText(list, `Announcements for ${fmtDate(dateInput.value)}`));
 });
 
 document.getElementById('copy-announce-btn').addEventListener('click', () => {
   const list = currentData.filter(a => a.channel === 'announce' || a.channel === 'both');
-  copyText(buildText(list));
+  copyText(buildText(list, `Announcements for ${fmtDate(dateInput.value)}`));
+});
+
+document.getElementById('copy-newsletter-btn').addEventListener('click', () => {
+  copyText(buildText(newsletterData, `Newsletter items for ${fmtMonth(monthInput.value)}`));
 });
 </script>
 </body>

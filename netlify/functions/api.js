@@ -20,6 +20,17 @@ function upcomingSundays(count = 12) {
   return dates;
 }
 
+function upcomingMonths(count = 6) {
+  const d = new Date();
+  const months = [];
+  for (let i = 1; i <= count; i++) {
+    const y = d.getFullYear() + Math.floor((d.getMonth() + i) / 12);
+    const m = ((d.getMonth() + i) % 12) + 1;
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+  }
+  return months;
+}
+
 function genId() {
   return Math.random().toString(36).slice(2, 12);
 }
@@ -45,12 +56,17 @@ export default async (req) => {
     return json(200, { dates: upcomingSundays() });
   }
 
+  if (path === "/api/upcoming-months" && method === "GET") {
+    return json(200, { months: upcomingMonths() });
+  }
+
   if (path === "/api/announcements" && method === "GET") {
     const items = (await store.get(LIST_KEY, { type: "json" })) || [];
     const serviceDate = url.searchParams.get("serviceDate");
-    const filtered = serviceDate
-      ? items.filter((a) => a.serviceDate === serviceDate)
-      : items;
+    const newsletterMonth = url.searchParams.get("newsletterMonth");
+    let filtered = items;
+    if (serviceDate) filtered = filtered.filter((a) => a.serviceDate === serviceDate);
+    if (newsletterMonth) filtered = filtered.filter((a) => a.newsletterMonth === newsletterMonth);
     filtered.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return json(200, filtered);
   }
@@ -64,13 +80,22 @@ export default async (req) => {
     }
 
     const title = (data.title || "").trim();
-    const serviceDate = data.serviceDate;
+    const submittedBy = (data.submittedBy || "").trim();
     const channel = data.channel;
+    let serviceDate = data.serviceDate;
+    let newsletterMonth = data.newsletterMonth;
 
     if (!title) return json(400, { error: "Title is required" });
-    if (!serviceDate) return json(400, { error: "Service date is required" });
-    if (!["announce", "bulletin", "both"].includes(channel)) {
+    if (!submittedBy) return json(400, { error: "Your name is required" });
+    if (!["announce", "bulletin", "both", "newsletter"].includes(channel)) {
       return json(400, { error: "Invalid channel" });
+    }
+    if (channel === "newsletter") {
+      if (!newsletterMonth) return json(400, { error: "Newsletter month is required" });
+      serviceDate = null;
+    } else {
+      if (!serviceDate) return json(400, { error: "Service date is required" });
+      newsletterMonth = null;
     }
 
     const items = (await store.get(LIST_KEY, { type: "json" })) || [];
@@ -79,7 +104,8 @@ export default async (req) => {
       title,
       description: (data.description || "").trim(),
       serviceDate,
-      submittedBy: (data.submittedBy || "").trim(),
+      newsletterMonth,
+      submittedBy,
       channel,
       createdAt: new Date().toISOString(),
       done: false,
